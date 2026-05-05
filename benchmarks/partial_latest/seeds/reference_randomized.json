@@ -1,0 +1,11 @@
+{
+  "reference_smiles": "N1(C(COC)=O)C(C)CN(CC1)C(c1cc(Cl)ccc1)",
+  "attempts": 30417,
+  "max_variants": 10000,
+  "max_attempts": 500000,
+  "stagnation_limit": 5000,
+  "stop_reason": "stagnation_limit",
+  "isomeric_smiles": true,
+  "include_canonical": true,
+  "variant_count": 1888
+}

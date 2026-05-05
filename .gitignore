@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+outputs/
+*.smi
+batch_*.txt
+benchmark_results/
+
+benchmarks/latest/smiles/
+benchmarks/latest/all_molecule_metrics.csv
+benchmarks/latest/metrics/*_molecule_metrics.csv
+benchmarks/partial_latest/smiles/
+benchmarks/partial_latest/all_molecule_metrics.csv
+benchmarks/partial_latest/metrics/*_molecule_metrics.csv
