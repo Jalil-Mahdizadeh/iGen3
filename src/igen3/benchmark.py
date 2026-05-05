@@ -1,4 +1,4 @@
-"""Benchmark de novo iGen3 generators for speed and RDKit molecular metrics."""
+"""Benchmark iGen3 generators for speed and RDKit molecular metrics."""
 
 from __future__ import annotations
 
@@ -13,17 +13,16 @@ import torch
 
 from .generation import (
     autotune_batch_size,
+    generate_derivative_batch,
     generate_de_novo_batch,
-    generate_partial_batch,
     write_de_novo_file,
-    write_partial_file,
+    write_derivative_file,
 )
 from .metrics import save_metrics
 from .model import load_generator, maybe_compile_generator
 from .plots import (
     plot_descriptor_distributions,
     plot_metric_bars,
-    plot_sa_score_summary,
     plot_throughput,
     plot_throughput_trace,
     write_plot_index,
@@ -107,6 +106,9 @@ def run_benchmark(
     greedy: bool = False,
     seed: int | None = 13,
     model_root: Path | None = None,
+    max_candidates: int | None = None,
+    max_candidate_multiplier: float = 50.0,
+    stagnation_limit: int | None = None,
 ) -> pd.DataFrame:
     smiles_dir, metrics_dir, figures_dir, all_metrics_path = _prepare_output_dirs(output_dir)
 
@@ -150,6 +152,9 @@ def run_benchmark(
             temperature=spec.default_de_novo_temperature,
             do_sample=not greedy,
             top_k=spec.default_top_k if top_k is None else top_k,
+            max_candidates=max_candidates,
+            max_candidate_multiplier=max_candidate_multiplier,
+            stagnation_limit=stagnation_limit,
             progress=True,
         )
         if generator.device.type == "cuda":
@@ -170,6 +175,11 @@ def run_benchmark(
         metric_summary["batch_size"] = stats.batch_size
         metric_summary["generation_seconds"] = stats.seconds
         metric_summary["smiles_per_second"] = stats.smiles_per_second
+        metric_summary["candidate_count"] = stats.candidates_generated
+        metric_summary["accepted_count"] = stats.generated
+        metric_summary["acceptance_fraction"] = stats.generated / stats.candidates_generated if stats.candidates_generated else 0.0
+        metric_summary["candidate_smiles_per_second"] = stats.candidate_smiles_per_second
+        metric_summary["stop_reason"] = stats.stopped_reason
         metric_summary["setup_warmup_seconds"] = setup_seconds
         metric_summary["output_path"] = str(output_path)
         all_summaries.append(metric_summary)
@@ -181,10 +191,14 @@ def run_benchmark(
             {
                 "model_id": spec.model_id,
                 "generation_mode": "de-novo",
-                "count": count,
+                "target_count": count,
+                "accepted_count": stats.generated,
+                "candidate_count": stats.candidates_generated,
                 "batch_size": stats.batch_size,
                 "generation_seconds": stats.seconds,
                 "smiles_per_second": stats.smiles_per_second,
+                "candidate_smiles_per_second": stats.candidate_smiles_per_second,
+                "stop_reason": stats.stopped_reason,
                 "setup_warmup_seconds": setup_seconds,
                 "output_path": str(output_path),
             }
@@ -217,6 +231,9 @@ def run_benchmark(
         "compile_mode": compile_mode,
         "greedy": greedy,
         "seed": seed,
+        "max_candidates": max_candidates,
+        "max_candidate_multiplier": max_candidate_multiplier,
+        "stagnation_limit": stagnation_limit,
         "python": platform.python_version(),
         "platform": platform.platform(),
         "torch": torch.__version__,
@@ -230,9 +247,6 @@ def run_benchmark(
         plot_metric_bars(summary_df, figures_dir, title_prefix="De Novo Molecular"),
         plot_descriptor_distributions(molecule_df, figures_dir, title_prefix="De Novo Descriptor"),
     ]
-    sa_plot = plot_sa_score_summary(summary_df, figures_dir, title_prefix="De Novo Molecular")
-    if sa_plot is not None:
-        plots.append(sa_plot)
     trace_plot = plot_throughput_trace(trace_df, figures_dir, title_prefix="De Novo Generation")
     if trace_plot is not None:
         plots.append(trace_plot)
@@ -240,11 +254,11 @@ def run_benchmark(
     return summary_df
 
 
-def run_partial_benchmark(
+def run_derivative_benchmark(
     *,
     seed_file: Path,
     model_ids: list[str] | None = None,
-    output_dir: Path = Path("benchmarks/partial_latest"),
+    output_dir: Path = Path("benchmarks/derivative_latest"),
     count: int = 10_000,
     batch_size: str | int | None = "auto",
     max_batch_size: int = 32768,
@@ -256,6 +270,10 @@ def run_partial_benchmark(
     greedy: bool = False,
     seed: int | None = 13,
     model_root: Path | None = None,
+    exclude_seed_molecules: bool = True,
+    max_candidates: int | None = None,
+    max_candidate_multiplier: float = 50.0,
+    stagnation_limit: int | None = None,
 ) -> pd.DataFrame:
     if count <= 0:
         raise ValueError("count must be positive")
@@ -288,10 +306,10 @@ def run_partial_benchmark(
 
         warmup_count = min(chosen_batch_size, count)
         warmup_seeds = _repeat_to_count(seeds, warmup_count)
-        _ = generate_partial_batch(
+        _ = generate_derivative_batch(
             generator,
             warmup_seeds,
-            temperature=spec.default_partial_temperature,
+            temperature=spec.default_derivative_temperature,
             do_sample=not greedy,
             top_k=spec.default_top_k if top_k is None else top_k,
         )
@@ -299,17 +317,21 @@ def run_partial_benchmark(
             torch.cuda.synchronize()
         setup_seconds = perf_counter() - setup_start
 
-        output_path = smiles_dir / f"{spec.model_id}_partial_{count}.smi"
-        stats = write_partial_file(
+        output_path = smiles_dir / f"{spec.model_id}_derivative_{count}.smi"
+        stats = write_derivative_file(
             generator,
             seeds=seeds,
             output_path=output_path,
             batch_size=chosen_batch_size,
             samples_per_seed=samples_per_seed,
             count=count,
-            temperature=spec.default_partial_temperature,
+            temperature=spec.default_derivative_temperature,
             do_sample=not greedy,
             top_k=spec.default_top_k if top_k is None else top_k,
+            exclude_seed_molecules=exclude_seed_molecules,
+            max_candidates=max_candidates,
+            max_candidate_multiplier=max_candidate_multiplier,
+            stagnation_limit=stagnation_limit,
             progress=True,
         )
         if generator.device.type == "cuda":
@@ -324,15 +346,21 @@ def run_partial_benchmark(
 
         metric_summary["family"] = spec.family
         metric_summary["stereochemistry"] = spec.stereochemistry
-        metric_summary["generation_mode"] = "partial"
-        metric_summary["temperature"] = spec.default_partial_temperature
+        metric_summary["generation_mode"] = "derivative"
+        metric_summary["temperature"] = spec.default_derivative_temperature
         metric_summary["top_k"] = spec.default_top_k if top_k is None else top_k
         metric_summary["batch_size"] = stats.batch_size
         metric_summary["generation_seconds"] = stats.seconds
         metric_summary["smiles_per_second"] = stats.smiles_per_second
+        metric_summary["candidate_count"] = stats.candidates_generated
+        metric_summary["accepted_count"] = stats.generated
+        metric_summary["acceptance_fraction"] = stats.generated / stats.candidates_generated if stats.candidates_generated else 0.0
+        metric_summary["candidate_smiles_per_second"] = stats.candidate_smiles_per_second
+        metric_summary["stop_reason"] = stats.stopped_reason
         metric_summary["setup_warmup_seconds"] = setup_seconds
         metric_summary["input_seed_count"] = len(seeds)
         metric_summary["samples_per_seed"] = samples_per_seed
+        metric_summary["exclude_seed_molecules"] = exclude_seed_molecules
         metric_summary["output_path"] = str(output_path)
         all_summaries.append(metric_summary)
         _append_molecule_metrics(molecule_df, all_metrics_path, write_header=not wrote_all_metrics)
@@ -342,13 +370,18 @@ def run_partial_benchmark(
         generation_records.append(
             {
                 "model_id": spec.model_id,
-                "generation_mode": "partial",
-                "count": count,
+                "generation_mode": "derivative",
+                "target_count": count,
+                "accepted_count": stats.generated,
+                "candidate_count": stats.candidates_generated,
                 "input_seed_count": len(seeds),
                 "samples_per_seed": samples_per_seed,
+                "exclude_seed_molecules": exclude_seed_molecules,
                 "batch_size": stats.batch_size,
                 "generation_seconds": stats.seconds,
                 "smiles_per_second": stats.smiles_per_second,
+                "candidate_smiles_per_second": stats.candidate_smiles_per_second,
+                "stop_reason": stats.stopped_reason,
                 "setup_warmup_seconds": setup_seconds,
                 "output_path": str(output_path),
             }
@@ -371,11 +404,12 @@ def run_partial_benchmark(
     trace_df.to_csv(output_dir / "throughput_trace.csv", index=False)
 
     metadata = {
-        "generation_mode": "partial",
-        "count_per_model": count,
+        "generation_mode": "derivative",
+        "target_count_per_model": count,
         "seed_file": str(seed_file),
         "input_seed_count": len(seeds),
         "samples_per_seed": samples_per_seed,
+        "exclude_seed_molecules": exclude_seed_molecules,
         "model_ids": [spec.model_id for spec in resolved_specs],
         "batch_size": batch_size,
         "max_batch_size": max_batch_size,
@@ -385,6 +419,9 @@ def run_partial_benchmark(
         "compile_mode": compile_mode,
         "greedy": greedy,
         "seed": seed,
+        "max_candidates": max_candidates,
+        "max_candidate_multiplier": max_candidate_multiplier,
+        "stagnation_limit": stagnation_limit,
         "python": platform.python_version(),
         "platform": platform.platform(),
         "torch": torch.__version__,
@@ -394,14 +431,11 @@ def run_partial_benchmark(
     (output_dir / "benchmark_metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
 
     plots = [
-        plot_throughput(summary_df, figures_dir, title_prefix="Partial Generation"),
-        plot_metric_bars(summary_df, figures_dir, title_prefix="Partial Molecular"),
-        plot_descriptor_distributions(molecule_df, figures_dir, title_prefix="Partial Descriptor"),
+        plot_throughput(summary_df, figures_dir, title_prefix="Derivative Generation"),
+        plot_metric_bars(summary_df, figures_dir, title_prefix="Derivative Molecular"),
+        plot_descriptor_distributions(molecule_df, figures_dir, title_prefix="Derivative Descriptor"),
     ]
-    sa_plot = plot_sa_score_summary(summary_df, figures_dir, title_prefix="Partial Molecular")
-    if sa_plot is not None:
-        plots.append(sa_plot)
-    trace_plot = plot_throughput_trace(trace_df, figures_dir, title_prefix="Partial Generation")
+    trace_plot = plot_throughput_trace(trace_df, figures_dir, title_prefix="Derivative Generation")
     if trace_plot is not None:
         plots.append(trace_plot)
     write_plot_index(plots, figures_dir)

@@ -37,7 +37,7 @@ docker run --rm --gpus all \
   --output /outputs/rl_isomeric_100k.smi
 ```
 
-Generate randomized partial seed SMILES:
+Generate randomized derivative seed SMILES:
 
 ```bash
 docker run --rm \
@@ -57,11 +57,11 @@ docker run --rm --gpus all \
   -v "${PWD}/outputs:/outputs" \
   igen3:blackwell generate \
   --model base-nonisomeric \
-  --mode partial \
+  --mode derivative \
   --seed-file /outputs/reference_randomized.smi \
   --samples-per-seed 10 \
   --count 10000 \
-  --output /outputs/base_nonisomeric_partials.smi
+  --output /outputs/base_nonisomeric_derivatives.smi
 ```
 
 Run the full benchmark:
@@ -75,16 +75,18 @@ docker run --rm --gpus all \
   --output-dir /benchmarks/latest
 ```
 
-Run the partial benchmark:
+Run the derivative benchmark:
 
 ```bash
 docker run --rm --gpus all \
   -v "${PWD}/models:/models:ro" \
   -v "${PWD}/benchmarks:/benchmarks" \
-  igen3:blackwell benchmark-partial \
-  --seed-file /benchmarks/partial_latest/seeds/reference_randomized.smi \
+  igen3:blackwell benchmark-derivative \
+  --seed-file /benchmarks/derivative_latest/seeds/reference_randomized.smi \
   --count 10000 \
-  --output-dir /benchmarks/partial_latest
+  --output-dir /benchmarks/derivative_latest
 ```
+
+Generation outputs are canonical, RDKit-valid, and unique. Derivative generation excludes molecules identical to the seed structures unless `--include-seed-molecules` is passed.
 
 The images use `python:3.12-slim` plus explicit PyTorch CUDA wheels. CUDA-enabled PyTorch still dominates image size, but model weights stay outside the image and are mounted read-only at runtime.

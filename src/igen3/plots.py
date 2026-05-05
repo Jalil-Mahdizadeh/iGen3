@@ -43,6 +43,7 @@ def plot_metric_bars(summary_df: pd.DataFrame, output_dir: Path, *, title_prefix
         ("lipinski_ro5_pass_fraction", "Ro5 Pass"),
         ("qed_mean", "Mean QED"),
     ]
+    sa_col = "sa_score_mean" if "sa_score_mean" in summary_df.columns and summary_df["sa_score_mean"].notna().any() else None
     plot_df = summary_df[["model_id"] + [col for col, _ in cols]].copy()
     plot_df = plot_df.melt(id_vars="model_id", var_name="metric", value_name="value")
     label_map = dict(cols)
@@ -50,43 +51,46 @@ def plot_metric_bars(summary_df: pd.DataFrame, output_dir: Path, *, title_prefix
 
     models = list(summary_df["model_id"])
     metrics = [label for _, label in cols]
-    width = 0.18
+    total_bars = len(metrics) + (1 if sa_col else 0)
+    width = min(0.16, 0.8 / max(total_bars, 1))
     x = range(len(models))
 
-    plt.figure(figsize=(10, 5))
+    _, ax = plt.subplots(figsize=(11, 5.5))
     for metric_index, metric in enumerate(metrics):
         values = [
             float(plot_df[(plot_df["model_id"] == model) & (plot_df["metric"] == metric)]["value"].fillna(0).iloc[0])
             for model in models
         ]
-        offsets = [pos + (metric_index - 1.5) * width for pos in x]
-        plt.bar(offsets, values, width=width, label=metric)
+        offsets = [pos + (metric_index - (total_bars - 1) / 2) * width for pos in x]
+        ax.bar(offsets, values, width=width, label=metric)
 
-    plt.ylabel("Fraction or score")
-    plt.ylim(0, 1.05)
-    plt.xlabel("Model")
-    plt.title(f"{title_prefix} Quality Metrics")
-    plt.xticks(list(x), models, rotation=25, ha="right")
-    plt.legend(ncols=4, fontsize=8)
-    _save_current(path)
-    return path
+    ax.set_ylabel("Fraction or QED score")
+    ax.set_ylim(0, 1.05)
+    ax.set_xlabel("Model")
+    ax.set_title(f"{title_prefix} Quality Metrics")
+    ax.set_xticks(list(x), models, rotation=25, ha="right")
 
+    handles, labels = ax.get_legend_handles_labels()
+    if sa_col:
+        sa_axis = ax.twinx()
+        sa_index = len(metrics)
+        sa_offsets = [pos + (sa_index - (total_bars - 1) / 2) * width for pos in x]
+        sa_values = [float(summary_df.loc[summary_df["model_id"] == model, sa_col].fillna(0).iloc[0]) for model in models]
+        sa_bars = sa_axis.bar(
+            sa_offsets,
+            sa_values,
+            width=width,
+            color="#7a4e9f",
+            hatch="//",
+            label="Mean SA Score",
+            alpha=0.85,
+        )
+        sa_axis.set_ylabel("Mean SA score (lower is easier)")
+        sa_axis.set_ylim(0, max(10.0, max(sa_values) * 1.15 if sa_values else 10.0))
+        handles.append(sa_bars)
+        labels.append("Mean SA Score")
 
-def plot_sa_score_summary(summary_df: pd.DataFrame, output_dir: Path, *, title_prefix: str = "Molecular") -> Path | None:
-    if "sa_score_mean" not in summary_df.columns or summary_df["sa_score_mean"].dropna().empty:
-        return None
-
-    path = output_dir / "sa_score_summary.png"
-    ordered = summary_df.sort_values("sa_score_mean", ascending=True)
-    plt.figure(figsize=(9, 5))
-    bars = plt.bar(ordered["model_id"], ordered["sa_score_mean"], color="#7a4e9f")
-    plt.ylabel("Mean SA score (lower is easier to synthesize)")
-    plt.xlabel("Model")
-    plt.title(f"{title_prefix} Synthetic Accessibility")
-    plt.xticks(rotation=25, ha="right")
-    for bar in bars:
-        height = bar.get_height()
-        plt.text(bar.get_x() + bar.get_width() / 2, height, f"{height:.2f}", ha="center", va="bottom", fontsize=8)
+    ax.legend(handles, labels, ncols=min(len(labels), 5), fontsize=8, loc="upper center", bbox_to_anchor=(0.5, -0.22))
     _save_current(path)
     return path
 
@@ -120,11 +124,16 @@ def plot_throughput_trace(trace_df: pd.DataFrame, output_dir: Path, *, title_pre
     if trace_df.empty:
         return None
     path = output_dir / "throughput_trace.png"
+    x_col = "candidates_generated" if "candidates_generated" in trace_df.columns else "generated"
+    y_col = "candidate_smiles_per_second" if "candidate_smiles_per_second" in trace_df.columns else "smiles_per_second"
+    x_label = "Candidate SMILES sampled" if x_col == "candidates_generated" else "Generated SMILES"
+    y_label = "Cumulative candidate SMILES per second" if y_col == "candidate_smiles_per_second" else "Cumulative SMILES per second"
+
     plt.figure(figsize=(9, 5))
     for model_id, group in trace_df.groupby("model_id"):
-        plt.plot(group["generated"], group["smiles_per_second"], marker="o", markersize=2, linewidth=1.5, label=model_id)
-    plt.xlabel("Generated SMILES")
-    plt.ylabel("Cumulative SMILES per second")
+        plt.plot(group[x_col], group[y_col], marker="o", markersize=2, linewidth=1.5, label=model_id)
+    plt.xlabel(x_label)
+    plt.ylabel(y_label)
     plt.title(f"{title_prefix} Throughput During Benchmark")
     plt.legend(fontsize=8)
     _save_current(path)

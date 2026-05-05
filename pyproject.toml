@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "igen3"
 version = "0.1.0"
-description = "Transformer and RL-tuned iGen3 de novo and partial SMILES generation."
+description = "Transformer and RL-tuned iGen3 de novo and derivative SMILES generation."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

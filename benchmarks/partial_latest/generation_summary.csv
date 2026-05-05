@@ -1,5 +1,0 @@
-model_id,generation_mode,count,input_seed_count,samples_per_seed,batch_size,generation_seconds,smiles_per_second,setup_warmup_seconds,output_path
-base-isomeric,partial,10000,1888,6,4887,6.017261109998799,1661.8856681128793,6.216569040996546,/benchmarks/partial_latest/smiles/base-isomeric_partial_10000.smi
-base-nonisomeric,partial,10000,1888,6,5286,5.070044189000328,1972.369397035122,5.418662369003869,/benchmarks/partial_latest/smiles/base-nonisomeric_partial_10000.smi
-rl-isomeric,partial,10000,1888,6,4845,4.207924770998943,2376.4683410977527,4.731886972003849,/benchmarks/partial_latest/smiles/rl-isomeric_partial_10000.smi
-rl-nonisomeric,partial,10000,1888,6,5286,4.230868212995119,2363.581065769192,5.523198667004181,/benchmarks/partial_latest/smiles/rl-nonisomeric_partial_10000.smi

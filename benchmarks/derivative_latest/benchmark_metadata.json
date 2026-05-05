@@ -1,7 +1,6 @@
 {
-  "generation_mode": "partial",
-  "count_per_model": 10000,
-  "seed_file": "/benchmarks/partial_latest/seeds/reference_randomized.smi",
+  "generation_mode": "derivative",
+  "seed_file": "/benchmarks/derivative_latest/seeds/reference_randomized.smi",
   "input_seed_count": 1888,
   "samples_per_seed": 6,
   "model_ids": [
@@ -29,5 +28,10 @@
     "total_memory_gb": 7.9595947265625,
     "free_memory_gb": 6.774410247802734,
     "torch_cuda": "12.8"
-  }
+  },
+  "target_count_per_model": 10000,
+  "final_outputs": "canonical RDKit-valid unique SMILES",
+  "postprocessed_existing_candidate_outputs": true,
+  "exclude_seed_molecules": true,
+  "candidate_count_per_model": 10000
 }

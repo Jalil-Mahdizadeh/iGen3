@@ -1,5 +1,5 @@
-model_id,generation_mode,count,batch_size,generation_seconds,smiles_per_second,setup_warmup_seconds,output_path
-base-isomeric,de-novo,500000,4887,331.18226969100215,1509.7426576202502,6.9036069180001505,/benchmarks/latest/smiles/base-isomeric_500000.smi
-base-nonisomeric,de-novo,500000,5286,229.7800803029968,2175.993668992895,5.622839078998368,/benchmarks/latest/smiles/base-nonisomeric_500000.smi
-rl-isomeric,de-novo,500000,4853,171.71905085999606,2911.7328420808362,4.535336806002306,/benchmarks/latest/smiles/rl-isomeric_500000.smi
-rl-nonisomeric,de-novo,500000,5286,159.78945216500142,3129.1176809573835,4.514256301998103,/benchmarks/latest/smiles/rl-nonisomeric_500000.smi
+model_id,generation_mode,target_count,accepted_count,candidate_count,batch_size,generation_seconds,smiles_per_second,candidate_smiles_per_second,stop_reason,setup_warmup_seconds,output_path
+base-isomeric,de-novo,500000,484565,500000,4887,331.18226969100215,1463.136901779513,1509.7426576202502,filtered-existing-output,6.903606918000151,/benchmarks/latest/smiles/base-isomeric_500000.smi
+base-nonisomeric,de-novo,500000,484057,500000,5286,229.7800803029968,2106.6099348633875,2175.993668992895,filtered-existing-output,5.622839078998368,/benchmarks/latest/smiles/base-nonisomeric_500000.smi
+rl-isomeric,de-novo,500000,481140,500000,4853,171.71905085999606,2801.902279277547,2911.7328420808362,filtered-existing-output,4.535336806002306,/benchmarks/latest/smiles/rl-isomeric_500000.smi
+rl-nonisomeric,de-novo,500000,482180,500000,5286,159.78945216500142,3017.5959268080624,3129.1176809573835,filtered-existing-output,4.514256301998103,/benchmarks/latest/smiles/rl-nonisomeric_500000.smi

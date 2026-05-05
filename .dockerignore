@@ -9,11 +9,12 @@ models/
 benchmarks/latest/smiles/
 benchmarks/latest/all_molecule_metrics.csv
 benchmarks/latest/metrics/*_molecule_metrics.csv
-benchmarks/partial_latest/smiles/
-benchmarks/partial_latest/all_molecule_metrics.csv
-benchmarks/partial_latest/metrics/*_molecule_metrics.csv
+benchmarks/derivative_latest/smiles/
+benchmarks/derivative_latest/all_molecule_metrics.csv
+benchmarks/derivative_latest/metrics/*_molecule_metrics.csv
 benchmark_results/
 outputs/
 *.smi
+!examples/*.smi
 batch_*.txt
 legacy/

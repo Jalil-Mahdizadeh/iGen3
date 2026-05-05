@@ -35,7 +35,7 @@ if torch.cuda.is_available():
 # Step A: Configuration and constants
 # --------------------------------------------------------------------------------------
 class Config:
-    seq_len   = 112
+    seq_len   = 122
     d_model   = 256
     n_head    = 8
     num_layers= 6
@@ -50,7 +50,7 @@ class Config:
     do_sample   = True
     top_k       = 64        # set None/0 to disable
     batch_size  = 30000      # adjust or autotune if you like
-    out_path    = "batch_partial_T2.0_v3.txt"  # streaming text output
+    out_path    = "batch_DERIVATIVE_T2.0_v3.txt"  # streaming text output
 
 config = Config()
 
@@ -63,7 +63,7 @@ print(f"Using device: {device} | dtype: {DTYPE}")
 # --------------------------------------------------------------------------------------
 # Step B: Load vocabulary
 # --------------------------------------------------------------------------------------
-with open("./model/vocab_NOISO.pkl", "rb") as f:
+with open("./model/vocab_ISO.pkl", "rb") as f:
     vocab = pickle.load(f)
 
 vocab_size = len(vocab)
@@ -254,7 +254,7 @@ def _top_k_mask_(logits, k: int):
     logits.masked_fill_(logits < kth, torch.finfo(logits.dtype).min)
     return logits
 
-def tokenize_partial(smi: str) -> list[int]:
+def tokenize_DERIVATIVE(smi: str) -> list[int]:
     # Ensure SOS present; strip spaces
     smi = smi.strip()
     if not smi or smi[0] != config.sos_token:
@@ -264,12 +264,12 @@ def tokenize_partial(smi: str) -> list[int]:
     return toks
 
 # --------------------------------------------------------------------------------------
-# Step E: Batch generation FROM PARTIALS with KV-cache (fast)
+# Step E: Batch generation FROM DERIVATIVES with KV-cache (fast)
 # --------------------------------------------------------------------------------------
 @torch.inference_mode()
-def generate_from_partials_batch_kvcache(
+def generate_from_DERIVATIVES_batch_kvcache(
     model: CachedGPTLikeModel,
-    partial_smiles_list: list[str],
+    DERIVATIVE_smiles_list: list[str],
     max_len: int = 112,
     temperature: float = 1.0,
     do_sample: bool = True,
@@ -277,19 +277,19 @@ def generate_from_partials_batch_kvcache(
     device: torch.device = device
 ):
     """
-    Fast batched generation conditioned on per-sequence partial prefixes.
+    Fast batched generation conditioned on per-sequence DERIVATIVE prefixes.
     We *force* the model to follow each given prefix by overriding the sampled token
     with the next prefix token until the prefix ends; after that, we sample/greedy.
     """
-    # Tokenize partials and ensure SOS at start
-    prefixes = [tokenize_partial(s) for s in partial_smiles_list]
+    # Tokenize DERIVATIVES and ensure SOS at start
+    prefixes = [tokenize_DERIVATIVE(s) for s in DERIVATIVE_smiles_list]
     B = len(prefixes)
     T = max_len
 
     # outputs buffer
     outputs = torch.full((B, T), pad_idx, dtype=torch.long, device=device)
 
-    # Fill position 0 with first token of each prefix (guaranteed SOS after tokenize_partial)
+    # Fill position 0 with first token of each prefix (guaranteed SOS after tokenize_DERIVATIVE)
     for b, p in enumerate(prefixes):
         outputs[b, 0] = p[0]
 
@@ -391,13 +391,13 @@ def decode_batch(token_batch: torch.Tensor) -> list[str]:
     return out
 
 # --------------------------------------------------------------------------------------
-# Step F: Example usage — partial generation + streaming write
+# Step F: Example usage — DERIVATIVE generation + streaming write
 # --------------------------------------------------------------------------------------
 if __name__ == "__main__":
-    # Example partial SMILES (may or may not include 'G'; EOS in partial is respected)
-    partials = ['N1(C(COC)=O)C(C)CN(CC1)C', 'N1(C(=O)COC)C(CN(C)CC1)C', 'N1(C)CCN(C(C1)C)C(=O)COC']*33
+    # Example DERIVATIVE SMILES (may or may not include 'G'; EOS in DERIVATIVE is respected)
+    DERIVATIVES = ['N1(C(COC)=O)C(C)CN(CC1)C', 'N1(C(=O)COC)C(CN(C)CC1)C', 'N1(C)CCN(C(C1)C)C(=O)COC']*33
     '''
-    partials = ['N1(C(COC)=O)C(C)CN(CC1)C',
+    DERIVATIVES = ['N1(C(COC)=O)C(C)CN(CC1)C',
  'N1(C(=O)COC)C(CN(C)CC1)C',
  'N1(C)CCN(C(C1)C)C(=O)COC',
  'C1N(C)CC(N(C(COC)=O)C1)C',
@@ -499,16 +499,16 @@ if __name__ == "__main__":
  'C(=O)(N1CCN(C)CC1C)COC']
     '''
 
-    # Build a batch of repeated partials to exercise throughput
-    repeats = math.ceil(config.batch_size / len(partials))
-    partials = (partials * repeats)[:config.batch_size]
+    # Build a batch of repeated DERIVATIVES to exercise throughput
+    repeats = math.ceil(config.batch_size / len(DERIVATIVES))
+    DERIVATIVES = (DERIVATIVES * repeats)[:config.batch_size]
 
-    print(f"Generating from {len(partials)} partials...")
+    print(f"Generating from {len(DERIVATIVES)} DERIVATIVES...")
 
     t0 = perf_counter()
-    tokens = generate_from_partials_batch_kvcache(
+    tokens = generate_from_DERIVATIVES_batch_kvcache(
         model=model,
-        partial_smiles_list=partials,
+        DERIVATIVE_smiles_list=DERIVATIVES,
         max_len=config.seq_len,
         temperature=config.temperature,
         do_sample=config.do_sample,
@@ -524,3 +524,4 @@ if __name__ == "__main__":
         fh.write('\n'.join(gen))
         fh.write('\n')
     print(f"Appended {len(gen)} lines to {config.out_path}")
+

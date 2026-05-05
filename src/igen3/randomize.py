@@ -1,4 +1,4 @@
-"""Randomized SMILES enumeration for partial-generation seed preparation."""
+"""Randomized SMILES enumeration for derivative-generation seed preparation."""
 
 from __future__ import annotations
 

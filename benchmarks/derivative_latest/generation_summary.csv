@@ -1,0 +1,5 @@
+model_id,generation_mode,target_count,accepted_count,candidate_count,batch_size,generation_seconds,smiles_per_second,candidate_smiles_per_second,stop_reason,setup_warmup_seconds,output_path,input_seed_count,samples_per_seed,exclude_seed_molecules
+base-isomeric,derivative,10000,1637,10000,4887,6.017261109998799,272.05068387007833,1661.8856681128793,filtered-existing-output,6.216569040996546,/benchmarks/derivative_latest/smiles/base-isomeric_derivative_10000.smi,1888,6,True
+base-nonisomeric,derivative,10000,1235,10000,5286,5.070044189000328,243.58762053383757,1972.369397035122,filtered-existing-output,5.418662369003869,/benchmarks/derivative_latest/smiles/base-nonisomeric_derivative_10000.smi,1888,6,True
+rl-isomeric,derivative,10000,1135,10000,4845,4.207924770998943,269.729156714595,2376.4683410977527,filtered-existing-output,4.731886972003849,/benchmarks/derivative_latest/smiles/rl-isomeric_derivative_10000.smi,1888,6,True
+rl-nonisomeric,derivative,10000,858,10000,5286,4.230868212995119,202.79525544299665,2363.581065769192,filtered-existing-output,5.523198667004181,/benchmarks/derivative_latest/smiles/rl-nonisomeric_derivative_10000.smi,1888,6,True

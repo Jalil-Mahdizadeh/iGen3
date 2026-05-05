@@ -440,3 +440,4 @@ if __name__ == "__main__":
     print(f"Final average throughput: {final_throughput:.1f} SMILES/s")
     print("-" * 50)
 
+

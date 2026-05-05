@@ -1,14 +1,14 @@
 # Latest De Novo Benchmark Run
 
-This folder contains the latest 500k-per-model Docker de novo benchmark outputs.
+This folder contains the latest Docker de novo benchmark artifacts. The original run sampled 500,000 candidate SMILES per model; the stored `.smi` files have been post-filtered to canonical RDKit-valid unique SMILES.
 
 Key files:
 
 | Path | Contents |
 | --- | --- |
 | `benchmark_summary.csv` | One row per model with speed and molecular metrics. |
-| `generation_summary.csv` | Generation timing and selected batch sizes. |
-| `throughput_trace.csv` | Per-batch cumulative throughput. |
+| `generation_summary.csv` | Candidate count, accepted output count, timing, and batch size. |
+| `throughput_trace.csv` | Output and candidate throughput summary. |
 | `benchmark_metadata.json` | Runtime, CUDA, GPU, and command settings. |
 | `figures/` | GitHub-ready PNG charts. |
 
@@ -16,9 +16,9 @@ Large generated SMILES files and per-molecule metric CSVs are kept on disk for i
 
 Summary:
 
-| Model | SMILES/s | Valid | Unique valid | QED mean | SA mean |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| `base-isomeric` | 1,510 | 0.9778 | 0.9911 | 0.6047 | 3.0693 |
-| `base-nonisomeric` | 2,176 | 0.9795 | 0.9884 | 0.6081 | 3.0764 |
-| `rl-isomeric` | 2,912 | 0.9826 | 0.9794 | 0.8562 | 2.4062 |
-| `rl-nonisomeric` | 3,129 | 0.9827 | 0.9814 | 0.8646 | 2.4314 |
+| Model | Candidates | Output | Output SMILES/s | Candidate SMILES/s | QED mean | SA mean | Ro5 pass |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `base-isomeric` | 500,000 | 484,565 | 1,463 | 1,510 | 0.6045 | 3.0727 | 0.8808 |
+| `base-nonisomeric` | 500,000 | 484,057 | 2,107 | 2,176 | 0.6079 | 3.0778 | 0.8808 |
+| `rl-isomeric` | 500,000 | 481,140 | 2,802 | 2,912 | 0.8551 | 2.4169 | 0.9996 |
+| `rl-nonisomeric` | 500,000 | 482,180 | 3,018 | 3,129 | 0.8636 | 2.4411 | 0.9997 |

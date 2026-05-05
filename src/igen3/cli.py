@@ -8,11 +8,11 @@ from pathlib import Path
 import pandas as pd
 import torch
 
-from .benchmark import run_benchmark, run_partial_benchmark
+from .benchmark import run_benchmark, run_derivative_benchmark
 from .generation import (
     autotune_batch_size,
+    write_derivative_file,
     write_de_novo_file,
-    write_partial_file,
 )
 from .metrics import save_metrics
 from .model import load_generator, maybe_compile_generator
@@ -54,7 +54,7 @@ def list_models(_: argparse.Namespace) -> None:
             "stereochemistry": spec.stereochemistry,
             "seq_len": spec.seq_len,
             "de_novo_temperature": spec.default_de_novo_temperature,
-            "partial_temperature": spec.default_partial_temperature,
+            "derivative_temperature": spec.default_derivative_temperature,
             "description": spec.description,
         }
         for spec in MODEL_SPECS.values()
@@ -93,6 +93,9 @@ def generate(args: argparse.Namespace) -> None:
             temperature=temperature,
             do_sample=not args.greedy,
             top_k=top_k,
+            max_candidates=args.max_candidates,
+            max_candidate_multiplier=args.max_candidate_multiplier,
+            stagnation_limit=args.stagnation_limit,
             progress=not args.no_progress,
         )
     else:
@@ -102,8 +105,8 @@ def generate(args: argparse.Namespace) -> None:
         if args.seed_file:
             seeds.extend(_read_seed_file(args.seed_file))
         if not seeds:
-            raise SystemExit("partial mode requires --seed-smiles or --seed-file")
-        stats = write_partial_file(
+            raise SystemExit("derivative mode requires --seed-smiles or --seed-file")
+        stats = write_derivative_file(
             generator,
             seeds=seeds,
             output_path=args.output,
@@ -113,12 +116,18 @@ def generate(args: argparse.Namespace) -> None:
             temperature=temperature,
             do_sample=not args.greedy,
             top_k=top_k,
+            exclude_seed_molecules=not args.include_seed_molecules,
+            max_candidates=args.max_candidates,
+            max_candidate_multiplier=args.max_candidate_multiplier,
+            stagnation_limit=args.stagnation_limit,
             progress=not args.no_progress,
         )
 
     print(
-        f"Generated {stats.generated:,} SMILES with {spec.model_id} in {stats.seconds:.2f}s "
-        f"({stats.smiles_per_second:.1f} SMILES/s). Output: {stats.output_path}"
+        f"Wrote {stats.generated:,} valid unique SMILES with {spec.model_id} after sampling "
+        f"{stats.candidates_generated:,} candidates in {stats.seconds:.2f}s "
+        f"({stats.smiles_per_second:.1f} output SMILES/s; stop: {stats.stopped_reason}). "
+        f"Output: {stats.output_path}"
     )
 
     if args.metrics:
@@ -148,6 +157,9 @@ def benchmark(args: argparse.Namespace) -> None:
         greedy=args.greedy,
         seed=args.seed,
         model_root=args.model_dir,
+        max_candidates=args.max_candidates,
+        max_candidate_multiplier=args.max_candidate_multiplier,
+        stagnation_limit=args.stagnation_limit,
     )
     print(
         summary[
@@ -157,9 +169,9 @@ def benchmark(args: argparse.Namespace) -> None:
     print(f"Benchmark artifacts written to {args.output_dir}")
 
 
-def benchmark_partial(args: argparse.Namespace) -> None:
+def benchmark_derivative(args: argparse.Namespace) -> None:
     top_k = None if args.top_k is None else args.top_k
-    summary = run_partial_benchmark(
+    summary = run_derivative_benchmark(
         seed_file=args.seed_file,
         model_ids=args.models,
         output_dir=args.output_dir,
@@ -174,13 +186,17 @@ def benchmark_partial(args: argparse.Namespace) -> None:
         greedy=args.greedy,
         seed=args.seed,
         model_root=args.model_dir,
+        exclude_seed_molecules=not args.include_seed_molecules,
+        max_candidates=args.max_candidates,
+        max_candidate_multiplier=args.max_candidate_multiplier,
+        stagnation_limit=args.stagnation_limit,
     )
     print(
         summary[
             ["model_id", "smiles_per_second", "valid_fraction", "unique_valid_fraction", "qed_mean", "sa_score_mean"]
         ].to_string(index=False)
     )
-    print(f"Partial benchmark artifacts written to {args.output_dir}")
+    print(f"Derivative benchmark artifacts written to {args.output_dir}")
 
 
 def randomize_smiles(args: argparse.Namespace) -> None:
@@ -203,7 +219,7 @@ def randomize_smiles(args: argparse.Namespace) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="igen3", description="Run iGen3 de novo and partial SMILES generation.")
+    parser = argparse.ArgumentParser(prog="igen3", description="Run iGen3 de novo and derivative SMILES generation.")
     parser.add_argument("--model-dir", type=Path, default=default_model_root(), help="Directory containing packaged model artifacts.")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -212,18 +228,36 @@ def build_parser() -> argparse.ArgumentParser:
 
     gen = subparsers.add_parser("generate", help="Generate SMILES with one model.")
     gen.add_argument("--model", required=True, choices=sorted(MODEL_SPECS), help="Model variant to run.")
-    gen.add_argument("--mode", choices=["de-novo", "partial"], default="de-novo", help="Generation mode.")
+    gen.add_argument("--mode", choices=["de-novo", "derivative"], default="de-novo", help="Generation mode.")
     gen.add_argument("--output", type=Path, required=True, help="Output .smi/.txt file.")
-    gen.add_argument("--count", type=int, default=1000, help="Number of molecules to generate.")
+    gen.add_argument("--count", type=int, default=1000, help="Valid unique output molecules requested.")
     gen.add_argument("--batch-size", default="auto", help="Batch size integer or 'auto'.")
     gen.add_argument("--max-batch-size", type=int, default=32768, help="Upper bound used by batch-size autotuning.")
     gen.add_argument("--temperature", type=float, default=None, help="Sampling temperature. Defaults depend on model and mode.")
     gen.add_argument("--top-k", type=int, default=None, help="Top-k sampling cutoff. Use 0 to disable.")
     gen.add_argument("--greedy", action="store_true", help="Use argmax decoding instead of sampling.")
     gen.add_argument("--seed", type=int, default=None, help="Torch random seed.")
-    gen.add_argument("--seed-smiles", action="append", help="Seed SMILES for partial mode. Can be repeated.")
-    gen.add_argument("--seed-file", type=Path, help="Text file containing one partial seed SMILES per line.")
-    gen.add_argument("--samples-per-seed", type=int, default=1, help="Partial-mode samples per seed before count clipping.")
+    gen.add_argument("--seed-smiles", action="append", help="Seed SMILES for derivative mode. Can be repeated.")
+    gen.add_argument("--seed-file", type=Path, help="Text file containing one derivative seed SMILES per line.")
+    gen.add_argument("--samples-per-seed", type=int, default=1, help="Derivative-mode samples per seed in each sampling cycle.")
+    gen.add_argument(
+        "--include-seed-molecules",
+        action="store_true",
+        help="Allow derivative output to include molecules identical to the input seeds.",
+    )
+    gen.add_argument("--max-candidates", type=int, default=None, help="Maximum sampled candidates used to fill valid unique output.")
+    gen.add_argument(
+        "--max-candidate-multiplier",
+        type=float,
+        default=50.0,
+        help="Candidate cap multiplier when --max-candidates is not provided.",
+    )
+    gen.add_argument(
+        "--stagnation-limit",
+        type=int,
+        default=None,
+        help="Stop after this many sampled candidates produce no new valid unique output. Use 0 to disable.",
+    )
     gen.add_argument("--device", default="auto", help="Torch device, for example auto, cuda, cpu.")
     gen.add_argument("--dtype", default="auto", choices=["auto", "float32", "float16", "bfloat16"], help="Inference dtype.")
     gen.add_argument("--compile", type=_compile_flag, default=False, help="Enable torch.compile: on/off.")
@@ -236,7 +270,7 @@ def build_parser() -> argparse.ArgumentParser:
     bench = subparsers.add_parser("benchmark", help="Benchmark all or selected de novo models.")
     bench.add_argument("--models", nargs="+", choices=sorted(MODEL_SPECS), help="Model variants. Defaults to all.")
     bench.add_argument("--output-dir", type=Path, default=Path("benchmarks/latest"), help="Directory for benchmark outputs.")
-    bench.add_argument("--count", type=int, default=100_000, help="Molecules generated per model.")
+    bench.add_argument("--count", type=int, default=100_000, help="Valid unique output molecules requested per model.")
     bench.add_argument("--batch-size", default="auto", help="Batch size integer or 'auto'.")
     bench.add_argument("--max-batch-size", type=int, default=32768, help="Upper bound used by batch-size autotuning.")
     bench.add_argument("--device", default="auto", help="Torch device, for example auto, cuda, cpu.")
@@ -246,40 +280,71 @@ def build_parser() -> argparse.ArgumentParser:
     bench.add_argument("--top-k", type=int, default=None, help="Top-k sampling cutoff. Defaults to the model setting.")
     bench.add_argument("--greedy", action="store_true", help="Use argmax decoding instead of sampling.")
     bench.add_argument("--seed", type=int, default=13, help="Torch random seed.")
+    bench.add_argument("--max-candidates", type=int, default=None, help="Maximum sampled candidates per model.")
+    bench.add_argument(
+        "--max-candidate-multiplier",
+        type=float,
+        default=50.0,
+        help="Candidate cap multiplier when --max-candidates is not provided.",
+    )
+    bench.add_argument(
+        "--stagnation-limit",
+        type=int,
+        default=None,
+        help="Stop after this many sampled candidates produce no new valid unique output. Use 0 to disable.",
+    )
     bench.set_defaults(func=benchmark)
 
-    partial_bench = subparsers.add_parser(
-        "benchmark-partial",
-        help="Benchmark partial generation using a precomputed randomized seed file.",
+    derivative_bench = subparsers.add_parser(
+        "benchmark-derivative",
+        help="Benchmark derivative generation using a precomputed randomized seed file.",
     )
-    partial_bench.add_argument("--seed-file", type=Path, required=True, help="Seed SMILES file from randomize-smiles.")
-    partial_bench.add_argument("--models", nargs="+", choices=sorted(MODEL_SPECS), help="Model variants. Defaults to all.")
-    partial_bench.add_argument(
+    derivative_bench.add_argument("--seed-file", type=Path, required=True, help="Seed SMILES file from randomize-smiles.")
+    derivative_bench.add_argument("--models", nargs="+", choices=sorted(MODEL_SPECS), help="Model variants. Defaults to all.")
+    derivative_bench.add_argument(
         "--output-dir",
         type=Path,
-        default=Path("benchmarks/partial_latest"),
-        help="Directory for partial benchmark outputs.",
+        default=Path("benchmarks/derivative_latest"),
+        help="Directory for derivative benchmark outputs.",
     )
-    partial_bench.add_argument("--count", type=int, default=10_000, help="Partial generations per model.")
-    partial_bench.add_argument("--batch-size", default="auto", help="Batch size integer or 'auto'.")
-    partial_bench.add_argument("--max-batch-size", type=int, default=32768, help="Upper bound used by batch-size autotuning.")
-    partial_bench.add_argument("--device", default="auto", help="Torch device, for example auto, cuda, cpu.")
-    partial_bench.add_argument(
+    derivative_bench.add_argument("--count", type=int, default=10_000, help="Valid unique derivatives requested per model.")
+    derivative_bench.add_argument("--batch-size", default="auto", help="Batch size integer or 'auto'.")
+    derivative_bench.add_argument("--max-batch-size", type=int, default=32768, help="Upper bound used by batch-size autotuning.")
+    derivative_bench.add_argument("--device", default="auto", help="Torch device, for example auto, cuda, cpu.")
+    derivative_bench.add_argument(
         "--dtype",
         default="auto",
         choices=["auto", "float32", "float16", "bfloat16"],
         help="Inference dtype.",
     )
-    partial_bench.add_argument("--compile", type=_compile_flag, default=False, help="Enable torch.compile: on/off.")
-    partial_bench.add_argument("--compile-mode", default="reduce-overhead", help="torch.compile mode.")
-    partial_bench.add_argument("--top-k", type=int, default=None, help="Top-k sampling cutoff. Defaults to the model setting.")
-    partial_bench.add_argument("--greedy", action="store_true", help="Use argmax decoding instead of sampling.")
-    partial_bench.add_argument("--seed", type=int, default=13, help="Torch random seed.")
-    partial_bench.set_defaults(func=benchmark_partial)
+    derivative_bench.add_argument("--compile", type=_compile_flag, default=False, help="Enable torch.compile: on/off.")
+    derivative_bench.add_argument("--compile-mode", default="reduce-overhead", help="torch.compile mode.")
+    derivative_bench.add_argument("--top-k", type=int, default=None, help="Top-k sampling cutoff. Defaults to the model setting.")
+    derivative_bench.add_argument("--greedy", action="store_true", help="Use argmax decoding instead of sampling.")
+    derivative_bench.add_argument("--seed", type=int, default=13, help="Torch random seed.")
+    derivative_bench.add_argument(
+        "--include-seed-molecules",
+        action="store_true",
+        help="Allow derivative output to include molecules identical to the input seeds.",
+    )
+    derivative_bench.add_argument("--max-candidates", type=int, default=None, help="Maximum sampled candidates per model.")
+    derivative_bench.add_argument(
+        "--max-candidate-multiplier",
+        type=float,
+        default=50.0,
+        help="Candidate cap multiplier when --max-candidates is not provided.",
+    )
+    derivative_bench.add_argument(
+        "--stagnation-limit",
+        type=int,
+        default=None,
+        help="Stop after this many sampled candidates produce no new valid unique output. Use 0 to disable.",
+    )
+    derivative_bench.set_defaults(func=benchmark_derivative)
 
     rand = subparsers.add_parser(
         "randomize-smiles",
-        help="Generate canonical and randomized seed SMILES for partial generation.",
+        help="Generate canonical and randomized seed SMILES for derivative generation.",
     )
     rand.add_argument("--smiles", required=True, help="Reference molecule SMILES.")
     rand.add_argument("--output", type=Path, required=True, help="Output seed file, one SMILES per line.")

@@ -1,10 +1,12 @@
 # iGen3
 
-iGen3 is a transformer-based de novo SMILES generator with base and reinforcement-learning tuned checkpoints. The package supports both de novo generation and partial SMILES generation, where a seed SMILES prefix is forced and the model samples derivatives from that prefix.
+iGen3 is a transformer-based de novo SMILES generator with base and reinforcement-learning tuned checkpoints. The package supports both de novo generation and derivative generation, where randomized seed SMILES are used as conditioning prefixes and the model samples derivative molecules from those prefixes.
+
+Generation commands write canonical SMILES that are both RDKit-valid and unique. In derivative mode, molecules identical to the input seed structures are excluded by default.
 
 ## Models
 
-| CLI model id | Family | SMILES type | Sequence length | Default de novo temperature | Default partial temperature |
+| CLI model id | Family | SMILES type | Sequence length | Default de novo temperature | Default derivative temperature |
 | --- | --- | --- | ---: | ---: | ---: |
 | `base-isomeric` | Base transformer | Isomeric | 122 | 1.0 | 1.5 |
 | `base-nonisomeric` | Base transformer | Non-isomeric | 112 | 1.0 | 1.5 |
@@ -43,7 +45,7 @@ docker run --rm --gpus all \
   --output /outputs/base_isomeric_100k.smi
 ```
 
-Prepare randomized seed SMILES for partial generation:
+Prepare randomized seed SMILES for derivative generation:
 
 ```bash
 docker run --rm \
@@ -64,7 +66,7 @@ docker run --rm --gpus all \
   -v "${PWD}/outputs:/outputs" \
   igen3:blackwell generate \
   --model rl-isomeric \
-  --mode partial \
+  --mode derivative \
   --seed-file /outputs/reference_randomized.smi \
   --samples-per-seed 10 \
   --count 10000 \
@@ -82,16 +84,16 @@ docker run --rm --gpus all \
   --output-dir /benchmarks/latest
 ```
 
-Run the partial-generation benchmark from a randomized seed file:
+Run the derivative-generation benchmark from a randomized seed file:
 
 ```bash
 docker run --rm --gpus all \
   -v "${PWD}/models:/models:ro" \
   -v "${PWD}/benchmarks:/benchmarks" \
-  igen3:blackwell benchmark-partial \
-  --seed-file /benchmarks/partial_latest/seeds/reference_randomized.smi \
+  igen3:blackwell benchmark-derivative \
+  --seed-file /benchmarks/derivative_latest/seeds/reference_randomized.smi \
   --count 10000 \
-  --output-dir /benchmarks/partial_latest
+  --output-dir /benchmarks/derivative_latest
 ```
 
 ## CLI
@@ -101,7 +103,7 @@ igen3 list-models
 igen3 generate --model rl-nonisomeric --mode de-novo --count 1000 --output outputs/rl_noiso.smi
 igen3 randomize-smiles --smiles "N1(C(COC)=O)C(C)CN(CC1)C(c1cc(Cl)ccc1)" --output outputs/reference_randomized.smi
 igen3 benchmark --count 500000 --output-dir benchmarks/latest
-igen3 benchmark-partial --seed-file outputs/reference_randomized.smi --count 10000 --output-dir benchmarks/partial_latest
+igen3 benchmark-derivative --seed-file outputs/reference_randomized.smi --count 10000 --output-dir benchmarks/derivative_latest
 ```
 
 For non-Docker installs, install the PyTorch CUDA wheel that matches your GPU first, then install this package:
@@ -123,18 +125,21 @@ Important options:
 | `--greedy` | Uses argmax decoding instead of sampling. |
 | `--compile on` | Enables `torch.compile`; useful for very large runs, but startup can be slower. |
 | `--metrics` | Computes RDKit metrics after a single generation run. |
+| `--max-candidates` | Caps sampled candidates used to fill the valid unique output file. |
+| `--stagnation-limit` | Stops when sampling stops finding new valid unique molecules. Use `0` to disable. |
+| `--include-seed-molecules` | Allows derivative output to include molecules identical to the seed structures. |
 
 The `randomize-smiles` command writes canonical and non-canonical RDKit SMILES
 variants for one valid reference molecule. It stops when `--max-variants`,
 `--max-attempts`, or `--stagnation-limit` is reached. Use this output as the
-`--seed-file` for partial generation.
+`--seed-file` for derivative generation.
 
 ## Project Layout
 
 ```text
 src/igen3/              Maintained package and master CLI
 models/                 Runtime-mounted model weights and vocabularies
-examples/               Example partial seed SMILES
+examples/               Example derivative seed SMILES
 benchmarks/             Benchmark outputs and figures
 docs/                   Docker and benchmark documentation
 legacy/original_scripts Original scripts kept for reference
@@ -142,7 +147,7 @@ legacy/original_scripts Original scripts kept for reference
 
 ## Notes
 
-The tokenizer maps `Cl` and `Br` to the original training tokens `X` and `Y` before generation. This fixes partial-seed handling for halogen-containing SMILES.
+The tokenizer maps `Cl` and `Br` to the original training tokens `X` and `Y` before generation. This fixes derivative-seed handling for halogen-containing SMILES.
 
 `requirements.txt` intentionally excludes PyTorch because CUDA wheel selection is hardware-specific. The Dockerfiles install explicit PyTorch CUDA wheels before installing the common Python dependencies.
 

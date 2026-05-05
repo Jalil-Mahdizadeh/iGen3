@@ -37,7 +37,7 @@ class ModelSpec:
     num_layers: int = 6
     dropout: float = 0.10
     default_de_novo_temperature: float = 1.0
-    default_partial_temperature: float = 1.5
+    default_derivative_temperature: float = 1.5
     default_top_k: int = 64
 
     @property
@@ -54,8 +54,8 @@ class ModelSpec:
         return self.artifact_dir(model_root) / self.vocab_name
 
     def default_temperature(self, mode: str) -> float:
-        if mode == "partial":
-            return self.default_partial_temperature
+        if mode == "derivative":
+            return self.default_derivative_temperature
         return self.default_de_novo_temperature
 
 
@@ -68,7 +68,7 @@ MODEL_SPECS: dict[str, ModelSpec] = {
         seq_len=122,
         weights_name="iGen3_base_isomeric_256d.pth",
         default_de_novo_temperature=1.0,
-        default_partial_temperature=1.5,
+        default_derivative_temperature=1.5,
     ),
     "base-nonisomeric": ModelSpec(
         model_id="base-nonisomeric",
@@ -78,7 +78,7 @@ MODEL_SPECS: dict[str, ModelSpec] = {
         seq_len=112,
         weights_name="iGen3_base_nonisomeric_256d.pth",
         default_de_novo_temperature=1.0,
-        default_partial_temperature=1.5,
+        default_derivative_temperature=1.5,
     ),
     "rl-isomeric": ModelSpec(
         model_id="rl-isomeric",
@@ -88,7 +88,7 @@ MODEL_SPECS: dict[str, ModelSpec] = {
         seq_len=122,
         weights_name="iGen3_rl_qed_sa_isomeric_256d.pth",
         default_de_novo_temperature=1.2,
-        default_partial_temperature=2.0,
+        default_derivative_temperature=2.0,
     ),
     "rl-nonisomeric": ModelSpec(
         model_id="rl-nonisomeric",
@@ -98,7 +98,7 @@ MODEL_SPECS: dict[str, ModelSpec] = {
         seq_len=112,
         weights_name="iGen3_rl_qed_sa_nonisomeric_256d.pth",
         default_de_novo_temperature=1.2,
-        default_partial_temperature=2.0,
+        default_derivative_temperature=2.0,
     ),
 }
 

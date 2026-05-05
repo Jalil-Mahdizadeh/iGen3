@@ -1,5 +1,4 @@
 {
-  "count_per_model": 500000,
   "model_ids": [
     "base-isomeric",
     "base-nonisomeric",
@@ -25,5 +24,10 @@
     "total_memory_gb": 7.9595947265625,
     "free_memory_gb": 6.786128997802734,
     "torch_cuda": "12.8"
-  }
+  },
+  "generation_mode": "de-novo",
+  "target_count_per_model": 500000,
+  "final_outputs": "canonical RDKit-valid unique SMILES",
+  "postprocessed_existing_candidate_outputs": true,
+  "candidate_count_per_model": 500000
 }
